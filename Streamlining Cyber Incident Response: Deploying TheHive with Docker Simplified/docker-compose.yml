@@ -1,0 +1,97 @@
+services:
+  thehive:
+    image: strangebee/thehive:5.2
+    container_name: hive
+    mem_limit: 1500m    
+    ports:
+      - "9000:9000"
+    depends_on:
+      - cassandra
+      - elasticsearch
+      - cortex
+    environment:
+      - JVM_OPTS="-Xms1024M -Xmx1024M"
+    volumes:
+      - ./vol/thehive/etc/thehive-application.conf:/etc/thehive/application.conf
+      - ./vol/thehive/db:/opt/thp/thehive/db
+      - ./vol/thehive/index:/opt/thp/thehive/index
+      - ./vol/thehive/data:/opt/thp/thehive/data
+      - ./vol/thehive/logs:/var/log/thehive
+      #- ./vol/thehive/security/cacerts:/usr/lib/share/security/cacerts --> if you using LDAP with SSL then you may need to import your cert here
+      # Copy the file to the directory menrioned uncomment the line  then run docker compose down and docker compose up -d --no-recreate --no-deps
+    command:
+      - --secret
+      - "mySecretForTheHive"
+      - "--cql-hostnames"
+      - "cassandra"    
+      - "--index-backend"
+      - "elasticsearch"
+      - "--es-hostnames"
+      - "elasticsearch"
+      - "--cortex-hostnames"
+      - "cortex"
+      - "--cortex-port"
+      - "9001"
+      - "--cortex-keys"
+      # put cortex api key once cortex is bootstraped
+      - "8yRzl4lzcDov6xn8yLT7CeymLQyRbNw0"
+    networks:
+      - hive
+  cassandra:
+    image: 'cassandra:4'
+    container_name: cassandra
+    mem_limit: 1600m
+    ports:
+      - "9042:9042"
+    environment:
+      - MAX_HEAP_SIZE=1024M
+      - HEAP_NEWSIZE=1024M
+      - CASSANDRA_CLUSTER_NAME=TheHive
+    volumes:
+      - ./vol/cassandra/data:/var/lib/cassandra
+    restart: on-failure
+    networks:
+      - hive
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.12
+    container_name: elasticsearch
+    mem_limit: 1500m
+    ports:
+      - "0.0.0.0:9200:9200"
+    environment:
+      - discovery.type=single-node
+      - script.allowed_types= inline
+      - thread_pool.search.queue_size=100000
+      - thread_pool.write.queue_size=10000      
+      - xpack.security.enabled=false
+      - cluster.name=hive      
+      - http.host=0.0.0.0
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536  
+    volumes:
+      - ./vol/elasticsearch/data:/usr/share/elasticsearch/data
+      - ./vol/elasticsearch/logs:/usr/share/elasticsearch/logs      
+    networks:
+      - hive
+  cortex:
+    image: thehiveproject/cortex:3.1.7
+    container_name: cortex
+    depends_on:
+      - elasticsearch
+    environment:
+      - job_directory=/tmp/cortex-jobs
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./vol/cortex/tmp/cortex-jobs:/tmp/cortex-jobs
+      - ./vol/cortex/logs:/var/log/cortex 
+      - ./vol/cortex/etc/cortex-application.conf:/cortex/application.conf
+    ports:
+      - "9001:9001"
+    privileged: true
+    networks:
+      - hive
+networks:
+  hive:
+    driver: bridge
