@@ -1,25 +1,6 @@
 services:
-  # This is capable to relay via gmail, Amazon SES, or generic relays
-  # See: https://hub.docker.com/r/ixdotai/smtp
-  mail:
-    image: ixdotai/smtp
-    environment:
-      - "SMARTHOST_ADDRESS=${SMARTHOST_ADDRESS}"
-      - "SMARTHOST_PORT=${SMARTHOST_PORT}"
-      - "SMARTHOST_USER=${SMARTHOST_USER}"
-      - "SMARTHOST_PASSWORD=${SMARTHOST_PASSWORD}"
-      - "SMARTHOST_ALIASES=${SMARTHOST_ALIASES}"
-
   redis:
     image: valkey/valkey:7.2
-    command: "--requirepass ${REDIS_PASSWORD:-redispassword}"
-    healthcheck:
-      test: "valkey-cli -a ${REDIS_PASSWORD:-redispassword} ping || exit 1"
-      interval: 2s
-      timeout: 1s
-      retries: 3
-      start_period: 30s
-
   db:
     # We use MariaDB because it supports ARM and has the expected collations
     image: mariadb:10.11
