@@ -8,6 +8,8 @@ from deap import base, creator, tools, algorithms
 import random
 import numpy as np
 
-
+# Load the dataset (replace the file path with your dataset path)
+url = "https://archive.ics.uci.edu/ml/machine-learning-databases/00327/PhishingData.arff"
+data = pd.read_csv(url)
 
 
