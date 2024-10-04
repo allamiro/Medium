@@ -188,7 +188,7 @@ print(f"Recall: {recall_test:.4f}")
 print(f"F1 Score: {f1_test:.4f}")
 print(f"AUC-ROC: {roc_auc_test:.4f}")
 
-# Plot the fitness progression across generations
+# Plot the fitness progression across generations and save to file
 plt.figure(figsize=(10, 6))
 plt.plot(best_fitness_progression, label="Best Fitness")
 plt.plot(avg_fitness_progression, label="Average Fitness")
@@ -197,6 +197,25 @@ plt.xlabel("Generation")
 plt.ylabel("F1 Score")
 plt.legend()
 plt.grid(True)
+plt.savefig("fitness_progression.png")  # Save the plot to a file
+plt.show()
+
+# Plot ROC curve for the test set and save to file
+y_pred_proba_test = final_clf.predict_proba(X_test_selected)[:, 1]
+fpr, tpr, thresholds = roc_curve(y_test, y_pred_proba_test)
+roc_auc = auc(fpr, tpr)
+
+plt.figure(figsize=(8, 6))
+plt.plot(fpr, tpr, label=f"ROC curve (AUC = {roc_auc_test:.4f})")
+plt.plot([0, 1], [0, 1], "k--")  # Diagonal line
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.title("Receiver Operating Characteristic - Test Set")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.legend(loc="lower right")
+plt.grid(True)
+plt.savefig("roc_curve_test_set.png")  # Save the plot to a file
 plt.show()
 
 # Output performance metrics
@@ -221,20 +240,3 @@ print(performance_results_val)
 
 print("\nTest Performance Metrics:")
 print(performance_results_test)
-
-# Plot ROC curve for the test set
-y_pred_proba_test = final_clf.predict_proba(X_test_selected)[:, 1]
-fpr, tpr, thresholds = roc_curve(y_test, y_pred_proba_test)
-roc_auc = auc(fpr, tpr)
-
-plt.figure(figsize=(8, 6))
-plt.plot(fpr, tpr, label=f"ROC curve (area = {roc_auc_test:.4f})")
-plt.plot([0, 1], [0, 1], "k--")  # Diagonal line
-plt.xlim([0.0, 1.0])
-plt.ylim([0.0, 1.05])
-plt.title("Receiver Operating Characteristic - Test Set")
-plt.xlabel("False Positive Rate")
-plt.ylabel("True Positive Rate")
-plt.legend(loc="lower right")
-plt.grid(True)
-plt.show()
