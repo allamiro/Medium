@@ -1,0 +1,36 @@
+services:
+  frr:
+    image: frrouting/frr:v8.3.1  # Use the latest stable FRR version
+    networks:
+      - dmz_network
+      - internal_network
+      - management_network
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./frr:/etc/frr
+    command: /usr/lib/frr/frrinit.sh start
+    restart: always
+
+networks:
+  dmz_network:
+    external: true
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.10.0/24
+
+  internal_network:
+    external: true
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.20.0/24
+
+  management_network:
+    external: true
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.30.0/24
