@@ -1,38 +1,132 @@
 services:
-  frr:
-    image: frrouting/frr:v8.3.1  # Use the latest stable FRR version
-    container_name: frr
-    networks:
-      - dmz_network
-      - internal_network
-      - management_network
+  firewall:
+    image: alpine
+    container_name: firewall
     cap_add:
       - NET_ADMIN
       - NET_RAW
+      - SYS_ADMIN
+    sysctls:
+      net.ipv4.ip_forward: 1
+    networks:
+      external_network:
+        ipv4_address: 172.18.0.2
+      dmz_network:
+        ipv4_address: 172.19.0.2
     volumes:
-      - ./frr:/etc/frr
-      - ./frr/frr-entrypoint.sh:/frr-entrypoint.sh
-    command: /bin/bash /frr-entrypoint.sh
-    restart: always
+      - ./firewall/firewall_rules.sh:/firewall_rules.sh
+    command: ["sh", "-c", "apk update && apk add curl iptables iproute2 bash && sh /firewall_rules.sh && tail -f /dev/null"]
+    restart: unless-stopped
+
+  # Testing Container in DMZ Network and Common Network
+  test-dmz:
+    image: alpine
+    container_name: test_dmz
+    networks:
+      dmz_network:
+        ipv4_address: 172.19.0.5
+    command: ["sh", "-c", "apk update && apk add curl iproute2 iputils && tail -f /dev/null"]
+
+  # Testing Container in Internal Network
+  test-internal:
+    image: alpine
+    container_name: test_internal
+    networks:
+      internal_network:
+        ipv4_address: 172.20.0.5
+    command: ["sh", "-c", "apk update && apk add curl iproute2 iputils && tail -f /dev/null"]
+
+  # Testing Container in Management Network
+  test-management:
+    image: alpine
+    container_name: test_management
+    networks:
+      management_net:
+        ipv4_address: 172.21.0.5
+    command: ["sh", "-c", "apk update && apk add curl iproute2 iputils && tail -f /dev/null"]
+
+  # Testing Container in External Network and Common Network
+  test-external:
+    image: alpine
+    container_name: test_external
+    networks:
+      external_network:
+        ipv4_address: 172.18.0.5
+
+    command: ["sh", "-c", "apk update && apk add curl iproute2 iputils && tail -f /dev/null"]
+
+  # NGINX in DMZ Network and Common Network
+  nginx_dmz:
+    image: nginx:latest
+    container_name: nginx_dmz
+    volumes:
+      - ./nginx/dmz_index.html:/usr/share/nginx/html/index.html
+    networks:
+      dmz_network:
+        ipv4_address: 172.19.0.4
+    restart: unless-stopped
+
+  # NGINX in Internal Network
+  nginx_internal:
+    image: nginx:latest
+    container_name: nginx_internal
+    volumes:
+      - ./nginx/internal_index.html:/usr/share/nginx/html/index.html
+    networks:
+      internal_network:
+        ipv4_address: 172.20.0.4
+    restart: unless-stopped
+
+  # NGINX in Management Network
+  nginx_management:
+    image: nginx:latest
+    container_name: nginx_management
+    volumes:
+      - ./nginx/management_index.html:/usr/share/nginx/html/index.html
+    networks:
+      management_net:
+        ipv4_address: 172.21.0.4
+    restart: unless-stopped
+
+  frr_router:
+    image: frrouting/frr:latest
+    container_name: frr_router
+    privileged: false
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_ADMIN
+    networks:
+      dmz_network:
+        ipv4_address: 172.19.0.254
+      internal_network:
+        ipv4_address: 172.20.0.254
+      management_net:
+        ipv4_address: 172.21.0.254
+    volumes:
+      - ./frr/configs:/etc/frr/configs:rw
+      - ./frr/start_frr.sh:/etc/frr/start_frr.sh:ro
+    command: "/bin/bash /etc/frr/start_frr.sh"
+    restart: unless-stopped
 
 networks:
+  external_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/24
   dmz_network:
-    external: true
     driver: bridge
     ipam:
       config:
-        - subnet: 10.0.10.0/24
-
+        - subnet: 172.19.0.0/24
   internal_network:
-    external: true
     driver: bridge
     ipam:
       config:
-        - subnet: 10.0.20.0/24
-
-  management_network:
-    external: true
+        - subnet: 172.20.0.0/24
+  management_net:
     driver: bridge
     ipam:
       config:
-        - subnet: 10.0.30.0/24
+        - subnet: 172.21.0.0/24
