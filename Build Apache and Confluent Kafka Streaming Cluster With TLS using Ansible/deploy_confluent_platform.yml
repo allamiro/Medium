@@ -48,11 +48,11 @@
         permanent: yes
         state: enabled
       with_items:
-        - "2181/tcp"  # ZooKeeper client port
-        - "2888/tcp"  # ZooKeeper leader port
-        - "3888/tcp"  # ZooKeeper election port
-        - "9092/tcp"  # Kafka listener port
-        - "8081/tcp"  # Schema Registry port
+        - "2181/tcp"
+        - "2888/tcp"
+        - "3888/tcp"
+        - "9092/tcp"
+        - "8081/tcp"
 
     - name: Reload firewalld
       command: firewall-cmd --reload
@@ -116,17 +116,77 @@
         src: templates/schema-registry.properties.j2
         dest: "{{ confluent_install_dir }}/etc/schema-registry/schema-registry.properties"
 
-    - name: Start ZooKeeper
-      shell: "{{ confluent_install_dir }}/bin/zookeeper-server-start {{ confluent_install_dir }}/etc/kafka/zookeeper.properties &"
-      async: 0
-      poll: 0
+    - name: Create ZooKeeper systemd service file
+      copy:
+        dest: /etc/systemd/system/zookeeper.service
+        content: |
+          [Unit]
+          Description=Apache ZooKeeper
+          After=network.target
 
-    - name: Start Kafka
-      shell: "{{ confluent_install_dir }}/bin/kafka-server-start {{ confluent_install_dir }}/etc/kafka/server.properties &"
-      async: 0
-      poll: 0
+          [Service]
+          Type=simple
+          ExecStart=/bin/bash -c "{{ confluent_install_dir }}/bin/zookeeper-server-start {{ confluent_install_dir }}/etc/kafka/zookeeper.properties"
+          ExecStop=/bin/bash -c "{{ confluent_install_dir }}/bin/zookeeper-server-stop"
+          Restart=on-failure
+          User=root
 
-    - name: Start Schema Registry
-      shell: "{{ confluent_install_dir }}/bin/schema-registry-start {{ confluent_install_dir }}/etc/schema-registry/schema-registry.properties &"
-      async: 0
-      poll: 0
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create Kafka systemd service file
+      copy:
+        dest: /etc/systemd/system/kafka.service
+        content: |
+          [Unit]
+          Description=Apache Kafka
+          After=zookeeper.service
+
+          [Service]
+          Type=simple
+          ExecStart=/bin/bash -c "{{ confluent_install_dir }}/bin/kafka-server-start {{ confluent_install_dir }}/etc/kafka/server.properties"
+          ExecStop=/bin/bash -c "{{ confluent_install_dir }}/bin/kafka-server-stop"
+          Restart=on-failure
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create Schema Registry systemd service file
+      copy:
+        dest: /etc/systemd/system/schema-registry.service
+        content: |
+          [Unit]
+          Description=Schema Registry
+          After=kafka.service
+
+          [Service]
+          Type=simple
+          ExecStart=/bin/bash -c "{{ confluent_install_dir }}/bin/schema-registry-start {{ confluent_install_dir }}/etc/schema-registry/schema-registry.properties"
+          ExecStop=/bin/bash -c "{{ confluent_install_dir }}/bin/schema-registry-stop"
+          Restart=on-failure
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd daemon
+      command: systemctl daemon-reload
+
+    - name: Start and enable ZooKeeper
+      service:
+        name: zookeeper
+        state: started
+        enabled: true
+
+    - name: Start and enable Kafka
+      service:
+        name: kafka
+        state: started
+        enabled: true
+
+    - name: Start and enable Schema Registry
+      service:
+        name: schema-registry
+        state: started
+        enabled: true
