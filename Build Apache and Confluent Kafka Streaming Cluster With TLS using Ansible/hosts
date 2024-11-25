@@ -5,3 +5,20 @@ kafka3.example.com
 
 [cert_authority]
 ca.example.com
+
+[logstash-collector]
+logstash1.example.com
+
+[logstash-ingestor]
+logstash2.example.com 
+
+[elastic_stack]
+elk1.example.com
+elk2.example.com 
+elk3.example.com
+
+[kibana]
+kibana.example.com
+
+[wazuh]
+wazuh.example.com 

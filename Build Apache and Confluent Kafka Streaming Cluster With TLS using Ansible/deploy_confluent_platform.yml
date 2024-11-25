@@ -31,3 +31,65 @@
           - grep
           - setroubleshoot
         state: present
+    - name: Ensure Confluent home directory
+      file:
+        path: "{{ confluent_home }}"
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+    - name: Download Confluent Platform archive
+      get_url:
+        url: "{{ confluent_archive_url }}"
+        dest: /tmp/confluent-community-{{ confluent_version }}.tar.gz
+    - name: Extract Confluent Platform
+      unarchive:
+        src: /tmp/confluent-community-{{ confluent_version }}.tar.gz
+        dest: /opt
+        remote_src: yes
+    - name: Rename Extracted Confluent directory
+      command: mv /opt/confluent-{{ confluent_version }} /opt/confluent
+      args:
+        removes: /opt/confluent/confluent-{{ confluent_version }}
+    - name: Verify confluent directory structure
+      command: ls -l /opt/confluent
+    - name: Configure ZooKeeper
+      template:
+        src: templates/zookeeper.properties.j2
+        dest: "/opt/confluent/etc/kafka/zookeeper.properties"
+
+    - name: Set myid for ZooKeeper
+      copy:
+        content: "{{ item.id }}"
+        dest: "{{ zookeeper_data_dir }}/myid"
+      with_items: "{{ zookeeper_servers }}"
+      when: inventory_hostname == item.host
+
+    - name: Configure Kafka
+      template:
+        src: templates/server.properties.j2
+        dest: "/opt/confluent/etc/kafka/server.properties"
+
+    - name: Configure Schema Registry
+      template:
+        src: templates/schema-registry.properties.j2
+        dest: "/opt/confluent/etc/schema-registry/schema-registry.properties"
+
+    - name: Start ZooKeeper
+      command: "/opt/confluent/bin/zookeeper-server-start /opt/confluent/etc/kafka/zookeeper.properties"
+      async: 0
+      poll: 0
+      become: true
+
+    - name: Start Kafka
+      command: "/opt/confluent/bin/kafka-server-start /opt/confluent/etc/kafka/server.properties"
+      async: 0
+      poll: 0
+      become: true
+
+    - name: Start Schema Registry
+      command: "/opt/confluent/bin/schema-registry-start /opt/confluent/etc/schema-registry/schema-registry.properties"
+      async: 0
+      poll: 0
+      become: true
+
