@@ -1,0 +1,33 @@
+---
+- name: Deploy Confluent Platform
+  hosts: kafka
+  become: yes
+  vars:
+    confluent_version: "7.7.1"
+    confluent_archive_url: "https://packages.confluent.io/archive/7.7/confluent-community-7.7.1.tar.gz"
+    zookeeper_data_dir: "/var/lib/zookeeper"
+    zookeeper_client_port: 2181
+    zookeeper_servers:
+      - { id: 1, host: "kafka1.example.com", leaderport: 2888, electionport: 3888 }
+      - { id: 2, host: "kafka2.example.com", leaderport: 2888, electionport: 3888 }
+      - { id: 3, host: "kafka3.example.com", leaderport: 2888, electionport: 3888 }
+    kafka_listeners: "PLAINTEXT://0.0.0.0:9092"
+    kafka_log_dirs: "/var/lib/kafka-logs"
+    schema_registry_port: 8081
+    schema_registry_listeners: "http://0.0.0.0:8081"
+    schema_registry_bootstrap_servers: "PLAINTEXT://kafka1.example.com:9092"
+  tasks:
+    - name: Install dependencies
+      dnf:
+        name:
+          - java-11-openjdk
+          - unzip
+          - curl
+          - tar
+          - wget
+          - tree
+          - openssl
+          - coreutils
+          - grep
+          - setroubleshoot
+        state: present

@@ -1,0 +1,7 @@
+[kafka]
+kafka1.example.com
+kafka2.example.com
+kafka3.example.com
+
+[cert_authority]
+ca.example.com
