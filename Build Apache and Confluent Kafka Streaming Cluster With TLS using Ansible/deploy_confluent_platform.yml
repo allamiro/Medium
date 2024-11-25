@@ -116,6 +116,7 @@
         src: templates/schema-registry.properties.j2
         dest: "{{ confluent_install_dir }}/etc/schema-registry/schema-registry.properties"
 
+    # Add systemd services
     - name: Create ZooKeeper systemd service file
       copy:
         dest: /etc/systemd/system/zookeeper.service
@@ -169,6 +170,15 @@
 
           [Install]
           WantedBy=multi-user.target
+
+    - name: Reboot the servers
+      reboot:
+        msg: "Rebooting to ensure services will start cleanly."
+
+    - name: Wait for servers to become available
+      wait_for_connection:
+        delay: 10
+        timeout: 300
 
     - name: Reload systemd daemon
       command: systemctl daemon-reload
