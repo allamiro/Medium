@@ -1,0 +1,7 @@
+broker.id={{ inventory_hostname }}
+log.dirs={{ kafka_log_dirs }}
+zookeeper.connect={% for server in zookeeper_servers %}{{ server.host }}:{{ zookeeper_client_port }}{% if not loop.last %},{% endif %}{% endfor %}
+listeners={{ kafka_listeners }}
+log.retention.hours=168
+log.segment.bytes=1073741824
+log.retention.check.interval.ms=300000

@@ -1,0 +1,7 @@
+all:
+  children:
+    kafka:
+      hosts:
+        kafka1.example.com:
+        kafka2.example.com:
+        kafka3.example.com:
