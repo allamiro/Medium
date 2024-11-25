@@ -5,7 +5,8 @@
   vars:
     confluent_version: "7.7.1"
     confluent_archive_url: "https://packages.confluent.io/archive/7.7/confluent-community-7.7.1.tar.gz"
-    confluent_extracted_dir: "/tmp/confluent-community-{{ confluent_version }}"
+    confluent_archive_path: "/tmp/confluent-community-{{ confluent_version }}.tar.gz"
+    confluent_extracted_dir: "/tmp/confluent-{{ confluent_version }}"
     confluent_install_dir: "/opt/confluent"
     zookeeper_data_dir: "/var/lib/zookeeper"
     zookeeper_client_port: 2181
@@ -17,6 +18,7 @@
       - { id: 1, host: "kafka1.example.com", leaderport: 2888, electionport: 3888 }
       - { id: 2, host: "kafka2.example.com", leaderport: 2888, electionport: 3888 }
       - { id: 3, host: "kafka3.example.com", leaderport: 2888, electionport: 3888 }
+
   tasks:
     - name: Install dependencies
       dnf:
@@ -55,22 +57,42 @@
     - name: Reload firewalld
       command: firewall-cmd --reload
 
-    - name: Download Confluent Platform archive
+    - name: Verify if the archive exists
+      stat:
+        path: "{{ confluent_archive_path }}"
+      register: archive_stat
+
+    - name: Download the Confluent archive if missing
       get_url:
         url: "{{ confluent_archive_url }}"
-        dest: /tmp/confluent-community-{{ confluent_version }}.tar.gz
+        dest: "{{ confluent_archive_path }}"
+      when: not archive_stat.stat.exists
 
     - name: Extract Confluent Platform to /tmp
       unarchive:
-        src: /tmp/confluent-community-{{ confluent_version }}.tar.gz
+        src: "{{ confluent_archive_path }}"
         dest: /tmp
         remote_src: yes
+        creates: "{{ confluent_extracted_dir }}"
+
+    - name: Remove existing /opt/confluent if it exists
+      file:
+        path: "{{ confluent_install_dir }}"
+        state: absent
 
     - name: Move Confluent Platform to /opt/confluent
-      command: mv {{ confluent_extracted_dir }} {{ confluent_install_dir }}
+      command: mv "{{ confluent_extracted_dir }}" "{{ confluent_install_dir }}"
 
-    - name: Verify confluent directory structure
-      command: ls -l {{ confluent_install_dir }}
+    - name: Verify Confluent directory structure
+      command: ls -l "{{ confluent_install_dir }}"
+
+    - name: Ensure ZooKeeper data directory exists
+      file:
+        path: "{{ zookeeper_data_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
 
     - name: Configure ZooKeeper
       template:
