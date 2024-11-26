@@ -1,2 +1,2 @@
 # Medium
-Medium Articles Scripts
+Medium Articles scripts and files. 
