@@ -1,0 +1,93 @@
+- name: Setup Certificate Authority for Home Lab
+  hosts: cert_authority
+  become: yes
+  vars:
+    ca_base_dir: /etc/ca
+    root_ca_dir: "{{ ca_base_dir }}/root"
+    interm_ca_dir: "{{ ca_base_dir }}/intermediate"
+    root_ca_key: "{{ root_ca_dir }}/root-ca.key"
+    root_ca_cert: "{{ root_ca_dir }}/root-ca.crt"
+    root_ca_serial: "{{ root_ca_dir }}/root-ca.srl"
+    interm_ca_key: "{{ interm_ca_dir }}/intermediate-ca.key"
+    interm_ca_csr: "{{ interm_ca_dir }}/intermediate-ca.csr"
+    interm_ca_cert: "{{ interm_ca_dir }}/intermediate-ca.crt"
+    interm_ca_serial: "{{ interm_ca_dir }}/intermediate-ca.srl"
+    ca_passphrase: "password123"
+
+  tasks:
+    - name: Create CA directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      with_items:
+        - "{{ root_ca_dir }}"
+        - "{{ interm_ca_dir }}"
+
+    - name: Generate root CA key and certificate
+      command: >
+        openssl req -x509 -extensions v3_ca
+        -newkey rsa:2048
+        -keyout {{ root_ca_key }}
+        -out {{ root_ca_cert }}
+        -subj "/O=homelab/OU=ca/CN=root-ca"
+        -days 3650
+        -passout pass:{{ ca_passphrase }}
+      args:
+        creates: "{{ root_ca_cert }}"
+      register: root_ca_result
+
+    - name: Verify root CA certificate
+      command: openssl x509 -noout -text -in {{ root_ca_cert }}
+      when: root_ca_result is changed
+
+    - name: Create root CA serial file
+      copy:
+        content: "00"
+        dest: "{{ root_ca_serial }}"
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Generate intermediate CA key and CSR
+      command: >
+        openssl req -new
+        -newkey rsa:2048
+        -keyout {{ interm_ca_key }}
+        -out {{ interm_ca_csr }}
+        -subj "/O=homelab/OU=ca/CN=intermediate-ca"
+        -passout pass:{{ ca_passphrase }}
+      args:
+        creates: "{{ interm_ca_csr }}"
+      register: interm_ca_result
+
+    - name: Verify intermediate CA CSR
+      command: openssl req -noout -text -verify -in {{ interm_ca_csr }}
+      when: interm_ca_result is changed
+
+    - name: Sign intermediate CA CSR with root CA
+      command: >
+        openssl x509 -req
+        -CA {{ root_ca_cert }}
+        -CAkey {{ root_ca_key }}
+        -CAserial {{ root_ca_serial }}
+        -extensions v3_intermediate_ca
+        -in {{ interm_ca_csr }}
+        -out {{ interm_ca_cert }}
+        -days 3650
+        -passin pass:{{ ca_passphrase }}
+      args:
+        creates: "{{ interm_ca_cert }}"
+
+    - name: Verify intermediate CA certificate
+      command: openssl x509 -noout -text -in {{ interm_ca_cert }}
+
+    - name: Create intermediate CA serial file
+      copy:
+        content: "00"
+        dest: "{{ interm_ca_serial }}"
+        owner: root
+        group: root
+        mode: '0600'
