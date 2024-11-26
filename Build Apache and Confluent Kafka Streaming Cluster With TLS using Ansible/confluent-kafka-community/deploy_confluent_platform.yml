@@ -26,6 +26,7 @@
           - java-11-openjdk
           - unzip
           - curl
+          - jq
           - tar
           - wget
           - tree
