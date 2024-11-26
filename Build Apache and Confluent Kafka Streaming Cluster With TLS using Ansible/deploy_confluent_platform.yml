@@ -41,7 +41,6 @@
         name: firewalld
         state: started
         enabled: true
-
     - name: Allow required ports in firewalld
       firewalld:
         port: "{{ item }}"
@@ -74,7 +73,6 @@
         dest: /tmp
         remote_src: yes
         creates: "{{ confluent_extracted_dir }}"
-
     - name: Remove existing /opt/confluent if it exists
       file:
         path: "{{ confluent_install_dir }}"
@@ -105,7 +103,7 @@
         dest: "{{ zookeeper_data_dir }}/myid"
       with_items: "{{ zookeeper_servers }}"
       when: inventory_hostname == item.host
-
+    # UPDATED TEMPLATE FOR SERVER.PROPERTIES
     - name: Configure Kafka
       template:
         src: templates/server.properties.j2
@@ -134,7 +132,6 @@
 
           [Install]
           WantedBy=multi-user.target
-
     - name: Create Kafka systemd service file
       copy:
         dest: /etc/systemd/system/kafka.service
@@ -170,7 +167,6 @@
 
           [Install]
           WantedBy=multi-user.target
-
     - name: Reboot the servers
       reboot:
         msg: "Rebooting to ensure services will start cleanly."
@@ -200,3 +196,5 @@
         name: schema-registry
         state: started
         enabled: true
+
+
