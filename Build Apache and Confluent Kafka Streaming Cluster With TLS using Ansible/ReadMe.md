@@ -2,7 +2,7 @@
 
 ### Step 1 :  Setup Certificate Authority Server
 
-``` cd certificate_authority_server```
+``` cd SSL/certificate_authority_server```
 
 ```ansible-playbook -i inventory.yml setup_ca.yml```
 
@@ -22,13 +22,13 @@ Then you can either deploy the confluent kafka platform or the apache kafka
 
 ### Confluent Kafka Ansible Deployment - WITHOUT SSL
 
-```cd apache-kafka```
+```cd NO-SSL/apache-kafka```
 
 ```ansible-playbook -i inventory.yml deploy_confluent_platform.yml```
 
 
 ### Apache Kafka Ansible Deployment - WITHOUT SSL
 
-```cd confluent-kafka```
+```cd NO-SSL/confluent-kafka```
 
 ```ansible-playbook -i inventory.yml deploy_apache_kafka.yml```
