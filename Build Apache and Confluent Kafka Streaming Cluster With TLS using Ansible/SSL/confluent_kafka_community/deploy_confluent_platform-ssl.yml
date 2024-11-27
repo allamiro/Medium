@@ -1,0 +1,423 @@
+---
+- name: Install or Uninstall Confluent Kafka Platform with SSL
+  hosts: kafka
+  become: yes
+  vars:
+    action: "install"  # Set to "uninstall" to remove the installation
+    confluent_version: "7.7.1"
+    confluent_archive_url: "https://packages.confluent.io/archive/7.7/confluent-community-7.7.1.tar.gz"
+    confluent_archive_path: "/tmp/confluent-community-{{ confluent_version }}.tar.gz"
+    confluent_extracted_dir: "/tmp/confluent-{{ confluent_version }}"
+    confluent_install_dir: "/opt/confluent"
+    zookeeper_data_dir: "/var/lib/zookeeper"
+    zookeeper_client_port: 2181
+    kafka_listeners: "SSL://{{ ansible_fqdn }}:9093"
+    kafka_log_dirs: "/var/lib/kafka-logs"
+    kafka_ssl_dir: "/opt/confluent/ssl"
+    kafka_ssl_password: "kafka123"  # Use Ansible Vault or prompt in production
+    schema_registry_listeners: "https://{{ ansible_fqdn }}:8081"
+    schema_registry_bootstrap_servers: "SSL://kafka1.example.com:9093"
+    zookeeper_servers:
+      - { id: 1, host: "kafka1.example.com", leaderport: 2888, electionport: 3888 }
+      - { id: 2, host: "kafka2.example.com", leaderport: 2888, electionport: 3888 }
+      - { id: 3, host: "kafka3.example.com", leaderport: 2888, electionport: 3888 }
+    ca_server: "ca.example.com"
+    ca_user: "root"
+    ca_ssl_dir: "/etc/ca/intermediate"
+    ca_passphrase: "password123"  # Use Ansible Vault or prompt in production
+    kafka_broker_keystore: "{{ kafka_ssl_dir }}/server.keystore.jks"
+    kafka_broker_truststore: "{{ kafka_ssl_dir }}/server.truststore.jks"
+
+  tasks:
+    - name: Install Confluent Kafka with SSL
+      block:
+        - name: Install dependencies
+          dnf:
+            name:
+              - java-11-openjdk
+              - java-11-openjdk-devel  # For keytool
+              - unzip
+              - curl
+              - tar
+              - wget
+              - tree
+              - openssl
+              - coreutils
+              - grep
+              - setroubleshoot
+              - firewalld
+            state: present
+
+        - name: Ensure firewalld is running
+          service:
+            name: firewalld
+            state: started
+            enabled: true
+
+        - name: Allow required ports in firewalld
+          firewalld:
+            port: "{{ item }}"
+            permanent: yes
+            state: enabled
+          loop:
+            - "2181/tcp"
+            - "2888/tcp"
+            - "3888/tcp"
+            - "9093/tcp"
+            - "8081/tcp"
+
+        - name: Reload firewalld
+          command: firewall-cmd --reload
+
+        - name: Verify if the archive exists
+          stat:
+            path: "{{ confluent_archive_path }}"
+          register: archive_stat
+
+        - name: Download the Confluent archive if missing
+          get_url:
+            url: "{{ confluent_archive_url }}"
+            dest: "{{ confluent_archive_path }}"
+          when: not archive_stat.stat.exists
+
+        - name: Extract Confluent Platform to /tmp
+          unarchive:
+            src: "{{ confluent_archive_path }}"
+            dest: /tmp
+            remote_src: yes
+            creates: "{{ confluent_extracted_dir }}"
+
+        - name: Remove existing /opt/confluent if it exists
+          file:
+            path: "{{ confluent_install_dir }}"
+            state: absent
+
+        - name: Move Confluent Platform to /opt/confluent
+          command: mv "{{ confluent_extracted_dir }}" "{{ confluent_install_dir }}"
+
+        - name: Ensure ZooKeeper data directory exists
+          file:
+            path: "{{ zookeeper_data_dir }}"
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+
+        - name: Configure ZooKeeper
+          template:
+            src: templates/zookeeper.properties.j2
+            dest: "{{ confluent_install_dir }}/etc/kafka/zookeeper.properties"
+
+        - name: Set myid for ZooKeeper
+          copy:
+            content: "{{ item.id }}"
+            dest: "{{ zookeeper_data_dir }}/myid"
+          loop: "{{ zookeeper_servers }}"
+          when: inventory_hostname == item.host
+
+        - name: Configure Kafka with SSL
+          template:
+            src: templates/server.properties.j2
+            dest: "{{ confluent_install_dir }}/etc/kafka/server.properties"
+
+        - name: Create SSL directory
+          file:
+            path: "{{ kafka_ssl_dir }}"
+            state: directory
+            owner: root
+            group: root
+            mode: '0700'
+
+        - name: Generate Kafka broker key and CSR
+          command: >
+            keytool -genkeypair -alias {{ inventory_hostname }}
+            -dname "CN={{ inventory_hostname }}, O=homelab, OU=kafka"
+            -keystore {{ kafka_broker_keystore }}
+            -keyalg RSA
+            -storepass {{ kafka_ssl_password }}
+            -keypass {{ kafka_ssl_password }}
+            -validity 3650
+            -ext SAN=DNS:{{ inventory_hostname }}
+          args:
+            creates: "{{ kafka_broker_keystore }}"
+
+        - name: Export Kafka broker certificate from keystore
+          command: >
+            keytool -certreq -alias {{ inventory_hostname }}
+            -keystore {{ kafka_broker_keystore }}
+            -file {{ kafka_ssl_dir }}/{{ inventory_hostname }}.csr
+            -storepass {{ kafka_ssl_password }}
+          args:
+            creates: "{{ kafka_ssl_dir }}/{{ inventory_hostname }}.csr"
+
+        # Ensure directories exist on Controller
+        - name: Ensure csrs directory exists on controller
+          delegate_to: localhost
+          run_once: yes
+          local_action:
+            module: file
+            path: csrs
+            state: directory
+
+        - name: Ensure certs directory exists on controller
+          delegate_to: localhost
+          run_once: yes
+          local_action:
+            module: file
+            path: certs
+            state: directory
+
+        - name: Fetch CSR from broker to controller
+          fetch:
+            src: "{{ kafka_ssl_dir }}/{{ inventory_hostname }}.csr"
+            dest: "csrs/{{ inventory_hostname }}.csr"
+            flat: yes
+
+        - name: Copy CSR to CA server
+          copy:
+            src: "csrs/{{ inventory_hostname }}.csr"
+            dest: "{{ ca_ssl_dir }}/certs/{{ inventory_hostname }}.csr"
+          delegate_to: "{{ ca_server }}"
+          become: yes
+          become_user: "{{ ca_user }}"
+
+        - name: Sign the CSR on CA server
+          command: >
+            openssl ca -batch
+            -config {{ ca_ssl_dir }}/openssl.cnf
+            -in {{ ca_ssl_dir }}/certs/{{ inventory_hostname }}.csr
+            -out {{ ca_ssl_dir }}/certs/{{ inventory_hostname }}.crt
+            -passin pass:{{ ca_passphrase }}
+          delegate_to: "{{ ca_server }}"
+          become: yes
+          become_user: "{{ ca_user }}"
+          args:
+            creates: "{{ ca_ssl_dir }}/certs/{{ inventory_hostname }}.crt"
+
+        - name: Fetch signed certificate from CA server to controller
+          fetch:
+            src: "{{ ca_ssl_dir }}/certs/{{ inventory_hostname }}.crt"
+            dest: "certs/{{ inventory_hostname }}.crt"
+            flat: yes
+          delegate_to: "{{ ca_server }}"
+
+        - name: Copy signed certificate to broker
+          copy:
+            src: "certs/{{ inventory_hostname }}.crt"
+            dest: "{{ kafka_ssl_dir }}/{{ inventory_hostname }}.crt"
+
+        - name: Fetch CA chain certificate from CA server to controller
+          fetch:
+            src: "{{ ca_ssl_dir }}/certs/ca-chain.crt"
+            dest: "certs/ca-chain.crt"
+            flat: yes
+          delegate_to: "{{ ca_server }}"
+          run_once: yes
+
+        - name: Copy CA chain certificate to broker
+          copy:
+            src: "certs/ca-chain.crt"
+            dest: "{{ kafka_ssl_dir }}/ca-chain.crt"
+
+        - name: Import CA certificate into truststore
+          command: >
+            keytool -importcert -noprompt
+            -alias CARoot
+            -file {{ kafka_ssl_dir }}/ca-chain.crt
+            -keystore {{ kafka_broker_truststore }}
+            -storepass {{ kafka_ssl_password }}
+          args:
+            creates: "{{ kafka_broker_truststore }}"
+
+        - name: Import signed certificate into keystore
+          command: >
+            keytool -importcert -noprompt
+            -alias {{ inventory_hostname }}
+            -file {{ kafka_ssl_dir }}/{{ inventory_hostname }}.crt
+            -keystore {{ kafka_broker_keystore }}
+            -storepass {{ kafka_ssl_password }}
+
+        - name: Set permissions on SSL directory
+          file:
+            path: "{{ kafka_ssl_dir }}"
+            mode: '0700'
+            recurse: yes
+            owner: root
+            group: root
+
+        - name: Configure Schema Registry with SSL
+          template:
+            src: templates/schema-registry.properties.j2
+            dest: "{{ confluent_install_dir }}/etc/schema-registry/schema-registry.properties"
+
+        - name: Create ZooKeeper systemd service file
+          copy:
+            dest: /etc/systemd/system/zookeeper.service
+            content: |
+              [Unit]
+              Description=Apache ZooKeeper
+              After=network.target
+
+              [Service]
+              Type=simple
+              ExecStart=/bin/bash -c "{{ confluent_install_dir }}/bin/zookeeper-server-start {{ confluent_install_dir }}/etc/kafka/zookeeper.properties"
+              ExecStop=/bin/bash -c "{{ confluent_install_dir }}/bin/zookeeper-server-stop"
+              Restart=on-failure
+              User=root
+
+              [Install]
+              WantedBy=multi-user.target
+
+        - name: Create Kafka systemd service file
+          copy:
+            dest: /etc/systemd/system/kafka.service
+            content: |
+              [Unit]
+              Description=Apache Kafka
+              After=zookeeper.service
+
+              [Service]
+              Type=simple
+              ExecStart=/bin/bash -c "{{ confluent_install_dir }}/bin/kafka-server-start {{ confluent_install_dir }}/etc/kafka/server.properties"
+              ExecStop=/bin/bash -c "{{ confluent_install_dir }}/bin/kafka-server-stop"
+              Restart=on-failure
+              User=root
+
+              [Install]
+              WantedBy=multi-user.target
+
+        - name: Create Schema Registry systemd service file
+          copy:
+            dest: /etc/systemd/system/schema-registry.service
+            content: |
+              [Unit]
+              Description=Schema Registry
+              After=kafka.service
+
+              [Service]
+              Type=simple
+              ExecStart=/bin/bash -c "{{ confluent_install_dir }}/bin/schema-registry-start {{ confluent_install_dir }}/etc/schema-registry/schema-registry.properties"
+              ExecStop=/bin/bash -c "{{ confluent_install_dir }}/bin/schema-registry-stop"
+              Restart=on-failure
+              User=root
+
+              [Install]
+              WantedBy=multi-user.target
+
+        - name: Reload systemd daemon
+          command: systemctl daemon-reload
+
+        - name: Reboot the servers
+          reboot:
+            msg: "Rebooting to ensure services will start cleanly."
+
+        - name: Wait for servers to become available
+          wait_for_connection:
+            delay: 10
+            timeout: 300
+
+        - name: Start and enable ZooKeeper
+          service:
+            name: zookeeper
+            state: started
+            enabled: true
+
+        - name: Start and enable Kafka
+          service:
+            name: kafka
+            state: started
+            enabled: true
+
+        - name: Start and enable Schema Registry
+          service:
+            name: schema-registry
+            state: started
+            enabled: true
+
+      when: action == "install"
+
+    - name: Uninstall Confluent Kafka Platform with SSL
+      block:
+        - name: Stop and disable services
+          service:
+            name: "{{ item }}"
+            state: stopped
+            enabled: false
+          ignore_errors: yes
+          loop:
+            - schema-registry
+            - kafka
+            - zookeeper
+
+        - name: Remove systemd service files
+          file:
+            path: /etc/systemd/system/{{ item }}
+            state: absent
+          loop:
+            - zookeeper.service
+            - kafka.service
+            - schema-registry.service
+
+        - name: Reload systemd daemon
+          command: systemctl daemon-reload
+
+        - name: Remove Confluent installation directory
+          file:
+            path: "{{ confluent_install_dir }}"
+            state: absent
+
+        - name: Remove ZooKeeper data directory
+          file:
+            path: "{{ zookeeper_data_dir }}"
+            state: absent
+
+        - name: Remove Kafka log directories
+          file:
+            path: "{{ kafka_log_dirs }}"
+            state: absent
+
+        - name: Remove SSL directory
+          file:
+            path: "{{ kafka_ssl_dir }}"
+            state: absent
+
+        - name: Remove Confluent archive from /tmp
+          file:
+            path: "{{ confluent_archive_path }}"
+            state: absent
+
+        - name: Remove extracted Confluent directory from /tmp
+          file:
+            path: "{{ confluent_extracted_dir }}"
+            state: absent
+
+        - name: Remove myid files from ZooKeeper data dir
+          file:
+            path: "{{ zookeeper_data_dir }}/myid"
+            state: absent
+
+        - name: Remove firewall rules
+          firewalld:
+            port: "{{ item }}"
+            permanent: yes
+            state: disabled
+          loop:
+            - "2181/tcp"
+            - "2888/tcp"
+            - "3888/tcp"
+            - "9093/tcp"
+            - "8081/tcp"
+
+        - name: Reload firewalld
+          command: firewall-cmd --reload
+
+        - name: Reboot the servers
+          reboot:
+            msg: "Rebooting after uninstallation to ensure clean state."
+
+        - name: Wait for servers to become available
+          wait_for_connection:
+            delay: 10
+            timeout: 300
+
+      when: action == "uninstall"
