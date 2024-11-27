@@ -14,6 +14,7 @@ Then you can either deploy the confluent kafka platform or the apache kafka
 * If you prefer using confluent kafka then execute the following command to install the application : 
 
 ```
+ansible-playbook -i inventory.yml SSL/confluent_kafka_community/deploy_confluent_platform-ssl.yml -e action=install
 
 ```
 
@@ -23,7 +24,7 @@ Then you can either deploy the confluent kafka platform or the apache kafka
 * If you prefer using apache kafka  then execute the following command to install the application : 
 
 ```
-
+ansible-playbook -i inventory.yml SSL/apache_kafka/deploy_apache_kafka-ssl.yml -e action=install
 ```
 
 
