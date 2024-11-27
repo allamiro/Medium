@@ -7,7 +7,9 @@
 
 Then you can either deploy the confluent kafka platform or the apache kafka 
 
-###  Confluent Kafka Ansible Deployment - WITH TLS/SSL 
+### Step 2 : Install Kafka 
+
+####  Confluent Kafka Ansible Deployment - WITH TLS/SSL 
 
 * If you prefer using confluent kafka then execute the following command to install the application : 
 
@@ -16,7 +18,7 @@ Then you can either deploy the confluent kafka platform or the apache kafka
 ```
 
 
-###  Apache Kafka  Ansible Deployment - WITH TLS/SSL
+####  Apache Kafka  Ansible Deployment - WITH TLS/SSL
 
 * If you prefer using apache kafka  then execute the following command to install the application : 
 
