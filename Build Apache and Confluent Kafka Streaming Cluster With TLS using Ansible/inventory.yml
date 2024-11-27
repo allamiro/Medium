@@ -8,3 +8,6 @@ all:
           broker_id: 2
         kafka3.example.com:
           broker_id: 3
+    cert_authority:
+      hosts:
+        ca.example.com:
