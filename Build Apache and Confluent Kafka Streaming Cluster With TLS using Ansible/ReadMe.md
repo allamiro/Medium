@@ -48,4 +48,4 @@ ansible-playbook -i inventory.yml SSL/apache_kafka/deploy_apache_kafka-ssl.yml -
 
 
 
-```ansible-playbook -i inventory.yml SSL/apache_kafka/deploy_apache_kafka.yml -e action=install```
+```ansible-playbook -i inventory.yml NO-SSL/apache_kafka/deploy_apache_kafka.yml -e action=install```
