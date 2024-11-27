@@ -1,9 +1,15 @@
 # Build Kafka Streaming Cluster with SSL/TLS using ansible (Confluent-Kafka) and Apache Kafka
 
+
+
+
 ### Step 1 :  Setup Certificate Authority Server
 
 
-```ansible-playbook -i inventory.yml SSL/certificate_authority_server/setup_ca.yml -e 'ca_action=install```
+```
+ansible-playbook -i inventory.yml SSL/certificate_authority_server/setup_ca.yml -e 'ca_action=install
+
+```
 
 Then you can either deploy the confluent kafka platform or the apache kafka 
 

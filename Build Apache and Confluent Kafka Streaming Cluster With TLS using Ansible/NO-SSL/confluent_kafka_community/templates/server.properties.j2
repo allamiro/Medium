@@ -4,18 +4,13 @@ log.dirs={{ kafka_log_dirs }}
 
 zookeeper.connect={% for server in zookeeper_servers %}{{ server.host }}:{{ zookeeper_client_port }}{% if not loop.last %},{% endif %}{% endfor %}
 
-listeners={{ kafka_listeners }}
+listeners=PLAINTEXT://{{ ansible_fqdn }}:9092
 
-advertised.listeners={{ kafka_listeners }}
-
-security.inter.broker.protocol=SSL
-ssl.keystore.location={{ kafka_broker_keystore }}
-ssl.keystore.password={{ kafka_ssl_password }}
-ssl.key.password={{ kafka_ssl_password }}
-ssl.truststore.location={{ kafka_broker_truststore }}
-ssl.truststore.password={{ kafka_ssl_password }}
-ssl.client.auth=none
+advertised.listeners=PLAINTEXT://{{ ansible_fqdn }}:9092
 
 log.retention.hours=168
+
 log.segment.bytes=1073741824
+
 log.retention.check.interval.ms=300000
+
