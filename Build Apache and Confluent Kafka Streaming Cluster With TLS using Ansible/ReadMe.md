@@ -7,7 +7,7 @@
 
 
 ```
-ansible-playbook -i inventory.yml SSL/certificate_authority_server/setup_ca.yml -e 'ca_action=install
+ansible-playbook -i inventory.yml SSL/certificate_authority_server/setup_ca.yml -e 'ca_action=install`
 
 ```
 
@@ -20,7 +20,7 @@ Then you can either deploy the confluent kafka platform or the apache kafka
 * If you prefer using confluent kafka then execute the following command to install the application : 
 
 ```
-ansible-playbook -i inventory.yml SSL/confluent_kafka_community/deploy_confluent_platform-ssl.yml -e action=install
+ansible-playbook -i inventory.yml SSL/confluent_kafka_community/deploy_confluent_platform-ssl.yml -e `action=install`
 
 ```
 
