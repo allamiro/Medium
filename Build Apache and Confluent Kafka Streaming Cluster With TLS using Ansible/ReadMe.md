@@ -41,11 +41,11 @@ ansible-playbook -i inventory.yml SSL/apache_kafka/deploy_apache_kafka-ssl.yml -
 
 
 
-```ansible-playbook -i inventory.yml deploy_confluent_platform.yml```
+```ansible-playbook -i inventory.yml NO-SSL/confluent_kafka_community/deploy_confluent_platform.yml -e action=install```
 
 
 ### Apache Kafka Ansible Deployment - WITHOUT SSL
 
 
 
-```ansible-playbook -i inventory.yml deploy_apache_kafka.yml```
+```ansible-playbook -i inventory.yml SSL/apache_kafka/deploy_apache_kafka.yml -e action=install```
