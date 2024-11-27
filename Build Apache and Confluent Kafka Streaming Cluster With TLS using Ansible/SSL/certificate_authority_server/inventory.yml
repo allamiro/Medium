@@ -1,5 +1,0 @@
-all:
-  children:
-    cert_authority:
-      hosts:
-        ca.example.com:

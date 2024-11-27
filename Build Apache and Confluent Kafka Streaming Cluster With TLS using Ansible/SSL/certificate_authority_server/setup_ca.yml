@@ -1,93 +1,328 @@
-- name: Setup Certificate Authority for Home Lab
+---
+- name: Install or Uninstall Certificate Authority for Home Lab
   hosts: cert_authority
   become: yes
   vars:
     ca_base_dir: /etc/ca
     root_ca_dir: "{{ ca_base_dir }}/root"
-    interm_ca_dir: "{{ ca_base_dir }}/intermediate"
-    root_ca_key: "{{ root_ca_dir }}/root-ca.key"
-    root_ca_cert: "{{ root_ca_dir }}/root-ca.crt"
-    root_ca_serial: "{{ root_ca_dir }}/root-ca.srl"
-    interm_ca_key: "{{ interm_ca_dir }}/intermediate-ca.key"
-    interm_ca_csr: "{{ interm_ca_dir }}/intermediate-ca.csr"
-    interm_ca_cert: "{{ interm_ca_dir }}/intermediate-ca.crt"
-    interm_ca_serial: "{{ interm_ca_dir }}/intermediate-ca.srl"
-    ca_passphrase: "password123"
+    intermediate_ca_dir: "{{ ca_base_dir }}/intermediate"
+    root_ca_key: "{{ root_ca_dir }}/private/root-ca.key"
+    root_ca_cert: "{{ root_ca_dir }}/certs/root-ca.crt"
+    root_ca_serial: "{{ root_ca_dir }}/serial"
+    intermediate_ca_key: "{{ intermediate_ca_dir }}/private/intermediate-ca.key"
+    intermediate_ca_csr: "{{ intermediate_ca_dir }}/csr/intermediate-ca.csr"
+    intermediate_ca_cert: "{{ intermediate_ca_dir }}/certs/intermediate-ca.crt"
+    intermediate_ca_serial: "{{ intermediate_ca_dir }}/serial"
+    root_ca_index: "{{ root_ca_dir }}/index.txt"
+    intermediate_ca_index: "{{ intermediate_ca_dir }}/index.txt"
+    ca_passphrase: "password123"  # Use Ansible Vault or prompt in production
+    intermediate_passphrase: "password123"  # Use Ansible Vault or prompt in production
+    ca_certificates:
+      - src: "certs/root-ca.crt"
+        dest: "/etc/pki/ca-trust/source/anchors/root-ca.crt"
+      - src: "certs/intermediate-ca.crt"
+        dest: "/etc/pki/ca-trust/source/anchors/intermediate-ca.crt"
 
   tasks:
-    - name: Create CA directories
-      file:
-        path: "{{ item }}"
-        state: directory
-        owner: root
-        group: root
-        mode: '0700'
-      with_items:
-        - "{{ root_ca_dir }}"
-        - "{{ interm_ca_dir }}"
 
-    - name: Generate root CA key and certificate
-      command: >
-        openssl req -x509 -extensions v3_ca
-        -newkey rsa:2048
-        -keyout {{ root_ca_key }}
-        -out {{ root_ca_cert }}
-        -subj "/O=homelab/OU=ca/CN=root-ca"
-        -days 3650
-        -passout pass:{{ ca_passphrase }}
-      args:
-        creates: "{{ root_ca_cert }}"
-      register: root_ca_result
+    - block:
 
-    - name: Verify root CA certificate
-      command: openssl x509 -noout -text -in {{ root_ca_cert }}
-      when: root_ca_result is changed
+        - name: Install necessary packages
+          dnf:
+            name:
+              - openssl
+              - ca-certificates
+            state: present
 
-    - name: Create root CA serial file
-      copy:
-        content: "00"
-        dest: "{{ root_ca_serial }}"
-        owner: root
-        group: root
-        mode: '0600'
+        - name: Create CA directory structure
+          file:
+            path: "{{ item }}"
+            state: directory
+            owner: root
+            group: root
+            mode: '0700'
+          loop:
+            - "{{ root_ca_dir }}"
+            - "{{ root_ca_dir }}/certs"
+            - "{{ root_ca_dir }}/crl"
+            - "{{ root_ca_dir }}/newcerts"
+            - "{{ root_ca_dir }}/private"
+            - "{{ intermediate_ca_dir }}"
+            - "{{ intermediate_ca_dir }}/certs"
+            - "{{ intermediate_ca_dir }}/crl"
+            - "{{ intermediate_ca_dir }}/csr"
+            - "{{ intermediate_ca_dir }}/newcerts"
+            - "{{ intermediate_ca_dir }}/private"
 
-    - name: Generate intermediate CA key and CSR
-      command: >
-        openssl req -new
-        -newkey rsa:2048
-        -keyout {{ interm_ca_key }}
-        -out {{ interm_ca_csr }}
-        -subj "/O=homelab/OU=ca/CN=intermediate-ca"
-        -passout pass:{{ ca_passphrase }}
-      args:
-        creates: "{{ interm_ca_csr }}"
-      register: interm_ca_result
+        - name: Create necessary files for root CA
+          file:
+            path: "{{ item }}"
+            state: touch
+            owner: root
+            group: root
+            mode: '0600'
+          loop:
+            - "{{ root_ca_serial }}"
+            - "{{ root_ca_index }}"
+          register: root_ca_files
 
-    - name: Verify intermediate CA CSR
-      command: openssl req -noout -text -verify -in {{ interm_ca_csr }}
-      when: interm_ca_result is changed
+        - name: Initialize root CA serial and index files
+          copy:
+            content: "{{ item.content }}"
+            dest: "{{ item.dest }}"
+            owner: root
+            group: root
+            mode: '0600'
+          loop:
+            - { dest: "{{ root_ca_serial }}", content: "1000" }
+            - { dest: "{{ root_ca_index }}", content: "" }
+          when: root_ca_files.changed
 
-    - name: Sign intermediate CA CSR with root CA
-      command: >
-        openssl x509 -req
-        -CA {{ root_ca_cert }}
-        -CAkey {{ root_ca_key }}
-        -CAserial {{ root_ca_serial }}
-        -extensions v3_intermediate_ca
-        -in {{ interm_ca_csr }}
-        -out {{ interm_ca_cert }}
-        -days 3650
-        -passin pass:{{ ca_passphrase }}
-      args:
-        creates: "{{ interm_ca_cert }}"
+        - name: Create necessary files for intermediate CA
+          file:
+            path: "{{ item }}"
+            state: touch
+            owner: root
+            group: root
+            mode: '0600'
+          loop:
+            - "{{ intermediate_ca_serial }}"
+            - "{{ intermediate_ca_index }}"
+          register: intermediate_ca_files
 
-    - name: Verify intermediate CA certificate
-      command: openssl x509 -noout -text -in {{ interm_ca_cert }}
+        - name: Initialize intermediate CA serial and index files
+          copy:
+            content: "{{ item.content }}"
+            dest: "{{ item.dest }}"
+            owner: root
+            group: root
+            mode: '0600'
+          loop:
+            - { dest: "{{ intermediate_ca_serial }}", content: "1000" }
+            - { dest: "{{ intermediate_ca_index }}", content: "" }
+          when: intermediate_ca_files.changed
 
-    - name: Create intermediate CA serial file
-      copy:
-        content: "00"
-        dest: "{{ interm_ca_serial }}"
-        owner: root
-        group: root
-        mode: '0600'
+        - name: Generate root CA key
+          command: >
+            openssl genrsa -aes256
+            -out {{ root_ca_key }}
+            -passout pass:{{ ca_passphrase }}
+            4096
+          args:
+            creates: "{{ root_ca_key }}"
+
+        - name: Generate root CA certificate
+          command: >
+            openssl req -x509 -new -nodes
+            -key {{ root_ca_key }}
+            -sha256
+            -days 3650
+            -out {{ root_ca_cert }}
+            -subj "/C=US/ST=State/L=City/O=Organization/OU=Org Unit/CN=Root CA"
+            -passin pass:{{ ca_passphrase }}
+          args:
+            creates: "{{ root_ca_cert }}"
+
+        - name: Generate intermediate CA key
+          command: >
+            openssl genrsa -aes256
+            -out {{ intermediate_ca_key }}
+            -passout pass:{{ intermediate_passphrase }}
+            4096
+          args:
+            creates: "{{ intermediate_ca_key }}"
+
+        - name: Generate intermediate CA CSR
+          command: >
+            openssl req -new
+            -key {{ intermediate_ca_key }}
+            -out {{ intermediate_ca_csr }}
+            -subj "/C=US/ST=State/L=City/O=Organization/OU=Org Unit/CN=Intermediate CA"
+            -passin pass:{{ intermediate_passphrase }}
+          args:
+            creates: "{{ intermediate_ca_csr }}"
+
+        - name: Create openssl.cnf for root CA
+          copy:
+            dest: "{{ root_ca_dir }}/openssl.cnf"
+            content: |
+              [ ca ]
+              default_ca = CA_default
+
+              [ CA_default ]
+              dir               = {{ root_ca_dir }}
+              certs             = $dir/certs
+              crl_dir           = $dir/crl
+              new_certs_dir     = $dir/newcerts
+              database          = $dir/index.txt
+              serial            = $dir/serial
+              RANDFILE          = $dir/private/.rand
+
+              private_key       = $dir/private/root-ca.key
+              certificate       = $dir/certs/root-ca.crt
+
+              default_days      = 3750
+              default_md        = sha256
+
+              policy            = policy_strict
+              email_in_dn       = no
+              rand_serial       = no
+
+              [ policy_strict ]
+              countryName             = match
+              stateOrProvinceName     = match
+              organizationName        = match
+              organizationalUnitName  = optional
+              commonName              = supplied
+              emailAddress            = optional
+
+              [ req ]
+              default_bits        = 4096
+              default_md          = sha256
+              default_keyfile     = privkey.pem
+              distinguished_name  = req_distinguished_name
+              x509_extensions     = v3_ca
+
+              [ req_distinguished_name ]
+              countryName                     = Country Name (2 letter code)
+              stateOrProvinceName             = State or Province Name (full name)
+              localityName                    = Locality Name (eg, city)
+              0.organizationName              = Organization Name (eg, company)
+              organizationalUnitName          = Organizational Unit Name (eg, section)
+              commonName                      = Common Name (e.g. server FQDN or YOUR name)
+
+              [ v3_ca ]
+              subjectKeyIdentifier = hash
+              authorityKeyIdentifier = keyid:always,issuer
+              basicConstraints = critical, CA:true
+              keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+
+              [ v3_intermediate_ca ]
+              subjectKeyIdentifier = hash
+              authorityKeyIdentifier = keyid:always,issuer
+              basicConstraints = critical, CA:true, pathlen:0
+              keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+
+        - name: Sign intermediate CA certificate with root CA
+          command: >
+            openssl ca
+            -config {{ root_ca_dir }}/openssl.cnf
+            -extensions v3_intermediate_ca
+            -days 3650
+            -notext
+            -md sha256
+            -in {{ intermediate_ca_csr }}
+            -out {{ intermediate_ca_cert }}
+            -batch
+            -passin pass:{{ ca_passphrase }}
+          args:
+            creates: "{{ intermediate_ca_cert }}"
+
+        - name: Create CA chain file
+          shell: >
+            cat {{ intermediate_ca_cert }} {{ root_ca_cert }} > {{ intermediate_ca_dir }}/certs/ca-chain.crt
+          args:
+            creates: "{{ intermediate_ca_dir }}/certs/ca-chain.crt"
+
+        - name: Set permissions on CA directories and files
+          file:
+            path: "{{ item.path }}"
+            mode: "{{ item.mode }}"
+            recurse: "{{ item.recurse | default(false) }}"
+          loop:
+            - { path: "{{ root_ca_dir }}", mode: '0700', recurse: true }
+            - { path: "{{ intermediate_ca_dir }}", mode: '0700', recurse: true }
+
+        - name: Ensure certs directory exists on controller
+          delegate_to: localhost
+          run_once: yes
+          local_action:
+            module: file
+            path: "{{ playbook_dir }}/files/certs"
+            state: directory
+
+        - name: Fetch CA certificates to controller
+          fetch:
+            src: "{{ item }}"
+            dest: "{{ playbook_dir }}/files/certs/"
+            flat: yes
+          loop:
+            - "{{ root_ca_cert }}"
+            - "{{ intermediate_ca_cert }}"
+          run_once: yes
+
+        - name: Verify that root CA signed the intermediate CA certificate
+          command: >
+            openssl verify -CAfile {{ root_ca_cert }} {{ intermediate_ca_cert }}
+          register: verify_result
+
+        - name: Display verification result
+          debug:
+            msg: "{{ verify_result.stdout }}"
+
+      when: (ca_action | default('install')) == "install"
+
+    - block:
+
+        - name: Remove CA directories and files
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - "{{ root_ca_dir }}"
+            - "{{ intermediate_ca_dir }}"
+
+        - name: Remove certs directory on controller
+          delegate_to: localhost
+          run_once: yes
+          local_action:
+            module: file
+            path: "{{ playbook_dir }}/files/certs"
+            state: absent
+
+      when: (ca_action | default('install')) == "uninstall"
+
+- name: Distribute or Remove CA certificates on clients
+  hosts: kafka,cert_authority
+  become: yes
+  vars:
+    ca_certificates:
+      - src: "certs/root-ca.crt"
+        dest: "/etc/pki/ca-trust/source/anchors/root-ca.crt"
+      - src: "certs/intermediate-ca.crt"
+        dest: "/etc/pki/ca-trust/source/anchors/intermediate-ca.crt"
+
+  tasks:
+
+    - block:
+
+        - name: Copy CA certificates to clients
+          copy:
+            src: "{{ item.src }}"
+            dest: "{{ item.dest }}"
+            owner: root
+            group: root
+            mode: '0644'
+          loop: "{{ ca_certificates }}"
+
+        - name: Update CA trust on clients
+          command: update-ca-trust
+
+      when: (ca_action | default('install')) == "install"
+
+    - block:
+
+        - name: Remove CA certificates from clients
+          file:
+            path: "{{ item.dest }}"
+            state: absent
+          loop: "{{ ca_certificates }}"
+
+        - name: Update CA trust on clients after removal
+          command: update-ca-trust
+
+        - name: Reboot the clients
+          reboot:
+            msg: "Rebooting system after CA uninstallation."
+
+      when: (ca_action | default('install')) == "uninstall"
