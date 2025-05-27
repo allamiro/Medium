@@ -1,1 +1,41 @@
-
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: minio
+  namespace: minio
+  labels: { app: minio }
+spec:
+  serviceName: minio-svc
+  replicas: 3
+  podManagement: Parallel
+  selector:
+    matchLabels: { app: minio }
+  template: 
+    metadata:
+      labels: { app: minio }
+    spec:
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+      containers:
+      - name: minio
+        image: 
+        args:
+          - server
+          - --console-address
+          - ":9433"
+          - https:///minio-{0..2}.minio-svc.minio.svc/data
+        env:
+          - name: MINIO_ROOT_USER
+            valueFrom:
+              secretKeyRef:
+                name: minio-credentials
+                key: rootUser
+          - name: MINIO_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: minio-credentials
+                key: rootPassword
+          - name: MINIO_BROWSER_REDIRECT_URL
+            value: 
+      
