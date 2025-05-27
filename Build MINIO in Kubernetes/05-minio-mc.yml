@@ -1,1 +1,24 @@
-
+apiVersion: batch/v1
+kind: Job
+metadata: 
+  name: minio-mc
+  namespace: minio
+  labels: { app: minio }
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: mc
+        image:
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            until mc alias set myminio https://minio-lb.minio.svc.cluster.local:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" --insecure; do echo ""
+            mc --insecure admin info myminio
+            sleep 3600
+        env:
+          - name: MINIO_ROOT_USER
+            valueFrom:
+              secretKeyRef: {  name: minio-crednetials , key: rootUser }
+              
