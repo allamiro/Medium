@@ -1,0 +1,116 @@
+---
+# =============================
+# Distributed MinIO Setup
+# =============================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio-distributed
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-headless
+  namespace: minio-distributed
+spec:
+  clusterIP: None
+  selector:
+    app: minio
+  ports:
+    - port: 9000
+      name: api
+    - port: 9001
+      name: console
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-lb
+  namespace: minio-distributed
+spec:
+  selector:
+    app: minio
+  type: LoadBalancer
+  loadBalancerIP: 192.168.49.101 # < change this
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: minio-distributed
+spec:
+  serviceName: minio-headless
+  replicas: 4
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: quay.io/minio/minio:RELEASE.2024-06-13T22-53-53Z
+          args:
+            - server
+            - http://minio-{0...3}.minio-headless.minio-distributed.svc.cluster.local/data{1...2}
+            - --console-address
+            - ":9001"
+          env:
+            - name: MINIO_ROOT_USER
+              value: "minioadmin"
+            - name: MINIO_ROOT_PASSWORD
+              value: "minio@demo!"
+          ports:
+            - containerPort: 9000
+            - containerPort: 9001
+          volumeMounts:
+            - name: data1
+              mountPath: /data1
+            - name: data2
+              mountPath: /data2
+  volumeClaimTemplates:
+    - metadata:
+        name: data1
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "standard"
+        resources:
+          requests:
+            storage: 5Gi
+    - metadata:
+        name: data2
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "standard"
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+  namespace: minio-distributed
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: minio-mc
+          image: minio/mc:RELEASE.2024-06-11T16-51-44Z
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mc alias set myminio http://minio-lb.minio-distributed.svc.cluster.local:9000 minioadmin minio@demo!
+              mc mb myminio/mybucket
+              mc policy set public myminio/mybucket
