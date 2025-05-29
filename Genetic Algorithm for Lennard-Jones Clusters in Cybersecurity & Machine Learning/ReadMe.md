@@ -4,3 +4,7 @@ This repository explores the application of Genetic Algorithms (GA) to two disti
 
 * Molecular Optimization: Using GA to minimize Lennard-Jones potential for atomic clusters, a classical benchmark in computational physics and optimization.
 * Cybersecurity and ML: Applying GA for feature selection and classification in phishing URL detection, enhancing model performance and interpretability.
+
+## Citation & Article
+
+* This work is inspired by an academic project* Genetic Algorithm for Lennard-Jones Clusters in Cybersecurity & Machine Learning (link to be updated).
