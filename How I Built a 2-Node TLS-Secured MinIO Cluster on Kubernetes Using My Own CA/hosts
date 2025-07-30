@@ -1,0 +1,6 @@
+[kubernetes]
+kube1.local.domain
+kube2.local.domain
+
+[cert_authority]
+ca.local.domain
